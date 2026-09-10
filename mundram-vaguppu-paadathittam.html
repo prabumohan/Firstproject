@@ -52,16 +52,28 @@ a{color:var(--sangam)}
 
 /* ---------- letterhead ---------- */
 .letterhead{
-  background:linear-gradient(180deg,#FFFDF8 0%, #F7F0E4 100%);
-  border-bottom:1px solid var(--rule); padding:18px 0 16px;
+  background:#fff; padding:12px 0 14px;
+  border-bottom:1px solid var(--rule);
 }
-.letterhead .row{display:flex; align-items:center; gap:16px}
-.crest{flex:none; width:72px; height:72px}
-.letterhead .names .ta{font-family:"Noto Serif Tamil",serif; font-weight:700; font-size:22px; color:var(--sangam); line-height:1.2}
-.letterhead .names .en{font-family:"Source Serif 4",serif; font-weight:600; font-size:15px; color:var(--navy); letter-spacing:.02em}
-.letterhead .names .sub{font-size:12.5px; color:var(--ink-soft); margin-top:3px}
-.letterhead .meta{margin-left:auto; text-align:right; font-size:12px; color:var(--ink-soft); font-family:"Source Sans 3",sans-serif}
-.letterhead .meta b{display:block; color:var(--navy); font-size:13px}
+.letterhead .brand{
+  display:block; width:100%; height:auto;
+  border-radius:8px; overflow:hidden;
+}
+.docstrip{
+  display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px;
+  margin-top:10px; padding:8px 14px;
+  background:var(--navy); color:#F3F0EA;
+  font-family:"Source Sans 3",sans-serif; font-size:12.5px;
+  border-radius:8px;
+}
+.docstrip b{color:var(--gold-soft)}
+.cover-emblem{
+  width:86px; height:86px; object-fit:contain; display:block;
+  background:#fff; border-radius:50%; padding:4px; margin-bottom:14px;
+  border:3px solid var(--gold);
+}
+.foot-brand{display:flex; align-items:center; gap:12px; margin-bottom:10px}
+.foot-brand img{width:52px; height:52px; object-fit:contain; background:#fff; border-radius:50%; padding:3px}
 
 /* ---------- sticky study-plan nav ---------- */
 .plan-nav{
@@ -266,8 +278,6 @@ footer h4{color:var(--gold-soft); font-size:14px; margin-bottom:8px; font-family
   .lbody{grid-template-columns:1fr}
   .lmain{border-right:none; border-bottom:1px solid var(--rule)}
   .iii,.who,footer .grid,.term-banner{grid-template-columns:1fr}
-  .letterhead .row{flex-wrap:wrap}
-  .letterhead .meta{margin-left:0; text-align:left}
 }
 @page{
   size:A4;
@@ -278,7 +288,8 @@ footer h4{color:var(--gold-soft); font-size:14px; margin-bottom:8px; font-family
   html,body{background:#fff !important; font-size:10.5pt}
   .topbar,.plan-nav,body>a.en-ui{display:none !important}
   .wrap{max-width:none; padding:0 2mm}
-  .letterhead{border-bottom:3px solid var(--gold); padding:10px 0 12px}
+  .letterhead{border-bottom:none; padding:0 0 10px}
+  .letterhead .brand{border-radius:4px}
   .cover{
     break-after:page; padding:28px 18px 32px; border-radius:8px;
     background:#1B2A4A !important;
@@ -307,26 +318,10 @@ footer h4{color:var(--gold-soft); font-size:14px; margin-bottom:8px; font-family
 
 <header class="letterhead">
   <div class="wrap">
-    <div class="row">
-      <svg class="crest" viewBox="0 0 72 72" aria-hidden="true">
-        <circle cx="36" cy="36" r="34" fill="#7A1836"/>
-        <circle cx="36" cy="36" r="29" fill="none" stroke="#C4A35A" stroke-width="1.6"/>
-        <circle cx="36" cy="36" r="24" fill="none" stroke="#E8D5A3" stroke-width=".7"/>
-        <text x="36" y="28" text-anchor="middle" fill="#E8D5A3" font-size="13" font-family="Noto Serif Tamil, serif" font-weight="700">ழ</text>
-        <text x="36" y="42" text-anchor="middle" fill="#fff" font-size="8" font-family="Source Serif 4, serif" font-weight="600">LTS</text>
-        <text x="36" y="52" text-anchor="middle" fill="#E8D5A3" font-size="6.5" font-family="Source Sans 3, sans-serif">1936</text>
-      </svg>
-      <div class="names">
-        <div class="ta">இலண்டன் தமிழ் சங்கம்</div>
-        <div class="en">The London Tamil Sangam</div>
-        <div class="sub">Tamil Language School · தமிழ்ப் பள்ளி · Complementary education for ages 5–16</div>
-      </div>
-      <div class="meta">
-        <b>Academic year 2025–2026</b>
-        Document: Class 3 Scheme of Work<br>
-        Audience: teachers, parents and pupils<br>
-        Pathway: Cambridge GCE O Level Tamil
-      </div>
+    <img class="brand" src="assets/ltsuk-logo.png" alt="இலண்டன் தமிழ்ச் சங்கம் — The London Tamil Sangam">
+    <div class="docstrip">
+      <span><b>Class 3 Scheme of Work</b> · Academic year 2025–2026 · teachers, parents and pupils</span>
+      <span>Tamil Language School · East Ham · Redbridge · Online · Cambridge GCE O Level Tamil</span>
     </div>
   </div>
 </header>
@@ -354,6 +349,7 @@ footer h4{color:var(--gold-soft); font-size:14px; margin-bottom:8px; font-family
     <circle cx="100" cy="100" r="12" fill="#fff" fill-opacity=".5"/>
   </svg>
   <div class="wrap">
+    <img class="cover-emblem" src="assets/ltsuk-emblem.jpeg" alt="London Tamil Sangam emblem">
     <div class="kicker">Education study plan · கல்வித் திட்டம்</div>
     <h1>மூன்றாம் வகுப்பு<br>பாடத்திட்டம் · கற்றல் திட்டம்</h1>
     <div class="en-title">Class 3 Tamil Study Plan &amp; Scheme of Work</div>
@@ -2527,10 +2523,15 @@ footer h4{color:var(--gold-soft); font-size:14px; margin-bottom:8px; font-family
 
 <footer>
   <div class="wrap">
+    <div class="foot-brand">
+      <img src="assets/ltsuk-emblem.jpeg" alt="London Tamil Sangam emblem">
+      <div>
+        <h4>இலண்டன் தமிழ்ச் சங்கம்</h4>
+        <b>The London Tamil Sangam</b> — Tamil Language School
+      </div>
+    </div>
     <div class="grid">
       <div>
-        <h4>இலண்டன் தமிழ் சங்கம்</h4>
-        <b>The London Tamil Sangam</b> — Tamil Language School<br>
         Class 3 study plan &amp; scheme of work · Academic year 2025–2026 · Edition 1<br>
         This plan is based on the teacher handbook. Page numbers refer to the Class 3 textbook.
         Teachers should use their own craft to bring each lesson to life.
