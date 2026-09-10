@@ -269,14 +269,28 @@ footer h4{color:var(--gold-soft); font-size:14px; margin-bottom:8px; font-family
   .letterhead .row{flex-wrap:wrap}
   .letterhead .meta{margin-left:0; text-align:left}
 }
+@page{
+  size:A4;
+  margin:12mm 12mm 16mm 12mm;
+}
 @media print{
-  body{background:#fff; font-size:11pt}
-  .topbar,.plan-nav{display:none}
-  .cover{background:#1B2A4A !important; -webkit-print-color-adjust:exact; print-color-adjust:exact}
   *{-webkit-print-color-adjust:exact; print-color-adjust:exact}
-  .lesson{page-break-inside:avoid; border:1px solid #ccc}
-  section{padding-top:20px}
-  footer{background:#fff; color:#333; border-top:1px solid #ccc}
+  html,body{background:#fff !important; font-size:10.5pt}
+  .topbar,.plan-nav,body>a.en-ui{display:none !important}
+  .wrap{max-width:none; padding:0 2mm}
+  .letterhead{border-bottom:3px solid var(--gold); padding:10px 0 12px}
+  .cover{
+    break-after:page; padding:28px 18px 32px; border-radius:8px;
+    background:#1B2A4A !important;
+  }
+  .cover h1{font-size:28pt}
+  .iii,.who,.cards,.legend,.rules,.map{break-inside:avoid}
+  .lesson{break-inside:avoid; border:1px solid #d7cbb8; margin:14px 0}
+  .lhead,.term-banner{break-after:avoid}
+  .lbody{grid-template-columns:1.4fr 1fr}
+  section{padding-top:16px}
+  footer{break-inside:avoid; background:#1B2A4A !important; color:#D5D9E8}
+  a{color:inherit; text-decoration:none}
 }
 </style>
 </head>
