@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: geolookup-config
+  namespace: geolookup
+  labels:
+    app.kubernetes.io/name: geolookupservice
+data:
+  HOST: "0.0.0.0"
+  PORT: "8080"
+  LOG_LEVEL: "info"
+  LOG_FORMAT: "json"
+  MAXMIND_DATA_DIR: "/data/maxmind"
+  MAXMIND_EDITIONS: "GeoLite2-City,GeoLite2-ASN"
+  MAXMIND_UPDATE_INTERVAL_HOURS: "24"
+  # Production: set false so pods are unready until an MMDB is loaded.
+  MAXMIND_ALLOW_FALLBACK: "false"

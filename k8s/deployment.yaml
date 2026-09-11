@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: geolookup
+  namespace: geolookup
+  labels:
+    app.kubernetes.io/name: geolookupservice
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: geolookupservice
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: geolookupservice
+    spec:
+      securityContext:
+        fsGroup: 10001
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+      initContainers:
+        - name: maxmind-download
+          image: geolookupservice:0.1.0
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "geolookupservice.updater"]
+          envFrom:
+            - configMapRef:
+                name: geolookup-config
+            - secretRef:
+                name: geolookup-maxmind
+          volumeMounts:
+            - name: maxmind
+              mountPath: /data/maxmind
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      containers:
+        - name: geolookup
+          image: geolookupservice:0.1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: geolookup-config
+            - secretRef:
+                name: geolookup-maxmind
+          volumeMounts:
+            - name: maxmind
+              mountPath: /data/maxmind
+            - name: tmp
+              mountPath: /tmp
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 8
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: maxmind
+          persistentVolumeClaim:
+            claimName: geolookup-maxmind
+        - name: tmp
+          emptyDir: {}

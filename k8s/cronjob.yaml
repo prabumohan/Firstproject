@@ -1,0 +1,59 @@
+# Optional. Use only with a ReadWriteMany volume, or as a one-off Job to
+# pre-seed the PVC. The Deployment already refreshes MaxMind DBs in-process
+# and via its init container, which is the recommended path on RWO disks.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: geolookup-maxmind-refresh
+  namespace: geolookup
+  labels:
+    app.kubernetes.io/name: geolookupservice
+spec:
+  schedule: "0 4 * * 3"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            fsGroup: 10001
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+          containers:
+            - name: maxmind-download
+              image: geolookupservice:0.1.0
+              imagePullPolicy: IfNotPresent
+              command: ["python", "-m", "geolookupservice.updater"]
+              envFrom:
+                - configMapRef:
+                    name: geolookup-config
+                - secretRef:
+                    name: geolookup-maxmind
+              volumeMounts:
+                - name: maxmind
+                  mountPath: /data/maxmind
+                - name: tmp
+                  mountPath: /tmp
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: "1"
+                  memory: 512Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+          volumes:
+            - name: maxmind
+              persistentVolumeClaim:
+                claimName: geolookup-maxmind
+            - name: tmp
+              emptyDir: {}
