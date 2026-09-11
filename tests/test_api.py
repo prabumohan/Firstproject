@@ -40,7 +40,7 @@ def test_fallback_known_ip(client):
 
 
 def test_fallback_unknown_public_ip(client):
-    body = client.get("/api/v1/ip", params={"address": "203.0.113.10"}).json()
+    body = client.get("/api/v1/ip", params={"address": "1.2.3.4"}).json()
     assert body["found"] is False
     assert body["source"] == "fallback"
     assert body["network_type"] == "public"
@@ -131,6 +131,6 @@ def test_maxmind_lookup_overrides_fallback(client, store):
 
 def test_maxmind_unknown_address(client, store):
     store.override_readers_for_tests(FakeCityReader({}), FakeAsnReader({}))
-    body = client.get("/api/v1/ip", params={"address": "203.0.113.99"}).json()
+    body = client.get("/api/v1/ip", params={"address": "1.2.3.4"}).json()
     assert body["source"] == "maxmind"
     assert body["found"] is False
