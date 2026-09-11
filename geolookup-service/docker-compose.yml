@@ -1,0 +1,41 @@
+# Laptop-first GeoLookupService.
+# No MaxMind license needed: fallback mode is on by default.
+# Copy .env.example to .env to set MAXMIND_LICENSE_KEY (downloads into the volume).
+name: geolookup-service
+
+services:
+  geolookup:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: geolookupservice:local
+    container_name: geolookup
+    ports:
+      - "8080:8080"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8080"
+      MAXMIND_LICENSE_KEY: ${MAXMIND_LICENSE_KEY:-}
+      MAXMIND_ACCOUNT_ID: ${MAXMIND_ACCOUNT_ID:-}
+      MAXMIND_DATA_DIR: /data/maxmind
+      MAXMIND_EDITIONS: ${MAXMIND_EDITIONS:-GeoLite2-City,GeoLite2-ASN}
+      MAXMIND_UPDATE_INTERVAL_HOURS: ${MAXMIND_UPDATE_INTERVAL_HOURS:-24}
+      MAXMIND_ALLOW_FALLBACK: ${MAXMIND_ALLOW_FALLBACK:-true}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: ${LOG_FORMAT:-text}
+    volumes:
+      - maxmind-data:/data/maxmind
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  maxmind-data:
+    name: geolookup-maxmind-data

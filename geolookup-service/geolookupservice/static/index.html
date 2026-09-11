@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GeoLookupService</title>
+  <style>
+    :root {
+      --bg: #0e141b;
+      --panel: #17202a;
+      --ink: #e8eef4;
+      --muted: #8ea0b3;
+      --line: #2a3948;
+      --accent: #3dd6c6;
+      --accent-2: #f0c14b;
+      --warn: #e8a54b;
+      --ok: #6fdf9a;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); font-family: "Segoe UI", "Iowan Old Style", Georgia, serif; }
+    body { min-height: 100vh; }
+    header {
+      padding: 1.5rem 1.75rem 1rem;
+      border-bottom: 1px solid var(--line);
+      display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap;
+    }
+    h1 { font-size: 1.35rem; font-weight: 650; margin: 0; letter-spacing: .02em; }
+    h1 span { color: var(--accent); }
+    .badge { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .75rem; padding: .25rem .55rem; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); }
+    .badge.maxmind { border-color: var(--ok); color: var(--ok); }
+    .badge.fallback { border-color: var(--warn); color: var(--warn); }
+    main { max-width: 960px; margin: 0 auto; padding: 1.5rem; display: grid; gap: 1.25rem; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 1.1rem 1.2rem; }
+    label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: .4rem; }
+    input, textarea {
+      width: 100%; background: #101820; color: var(--ink); border: 1px solid var(--line);
+      border-radius: 8px; padding: .7rem .8rem; font: 1rem ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    textarea { min-height: 6rem; resize: vertical; }
+    .row { display: flex; gap: .6rem; flex-wrap: wrap; margin-top: .7rem; }
+    button {
+      background: var(--accent); color: #06221e; border: 0; border-radius: 8px;
+      padding: .65rem 1rem; font-weight: 700; cursor: pointer;
+    }
+    button.secondary { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+    pre {
+      margin: 1rem 0 0; overflow: auto; background: #101820; border-radius: 8px;
+      padding: .9rem; font-size: .85rem; line-height: 1.45; border: 1px solid var(--line);
+    }
+    .meta { color: var(--muted); font-size: .9rem; margin: 0; }
+    a { color: var(--accent); }
+    footer { color: var(--muted); font-size: .85rem; padding: 0 1.5rem 2rem; max-width: 960px; margin: 0 auto; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Geo<span>Lookup</span>Service</h1>
+    <div id="mode" class="badge">checking…</div>
+  </header>
+  <main>
+    <section class="card">
+      <p class="meta">Query MaxMind GeoLite2/GeoIP2 (or the built-in fallback) for city, coordinates, timezone, and ASN.</p>
+      <label for="ip">IP address</label>
+      <input id="ip" value="8.8.8.8" spellcheck="false" />
+      <div class="row">
+        <button id="lookup">Lookup</button>
+        <button class="secondary" id="mine">Use my IP</button>
+      </div>
+      <pre id="one">{}</pre>
+    </section>
+    <section class="card">
+      <label for="batch">Batch (one IP per line, max 50)</label>
+      <textarea id="batch">1.1.1.1
+9.9.9.9
+127.0.0.1</textarea>
+      <div class="row"><button id="run-batch">Batch lookup</button></div>
+      <pre id="many">{}</pre>
+    </section>
+  </main>
+  <footer>
+    Other services should call <code>GET /api/v1/ip?address=</code> instead of downloading MaxMind databases themselves.
+    See <a href="/docs">OpenAPI docs</a>.
+  </footer>
+  <script>
+    const modeEl = document.getElementById("mode");
+    const one = document.getElementById("one");
+    const many = document.getElementById("many");
+    const pretty = (value) => JSON.stringify(value, null, 2);
+
+    async function refreshStatus() {
+      const res = await fetch("/api/v1/status");
+      const data = await res.json();
+      modeEl.textContent = data.mode + (data.ready ? " · ready" : " · not ready");
+      modeEl.className = "badge " + data.mode;
+    }
+
+    async function lookup(address) {
+      const url = address ? "/api/v1/ip?address=" + encodeURIComponent(address) : "/api/v1/ip";
+      const res = await fetch(url);
+      const data = await res.json();
+      one.textContent = pretty(data);
+    }
+
+    document.getElementById("lookup").onclick = () => lookup(document.getElementById("ip").value.trim());
+    document.getElementById("mine").onclick = () => lookup("");
+    document.getElementById("run-batch").onclick = async () => {
+      const addresses = document.getElementById("batch").value.split(/\s+/).map((s) => s.trim()).filter(Boolean);
+      const res = await fetch("/api/v1/ip/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ addresses }),
+      });
+      many.textContent = pretty(await res.json());
+    };
+
+    refreshStatus().catch((err) => { modeEl.textContent = String(err); });
+    lookup("8.8.8.8").catch((err) => { one.textContent = String(err); });
+  </script>
+</body>
+</html>

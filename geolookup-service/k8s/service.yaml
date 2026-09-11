@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: geolookup
+  namespace: geolookup
+  labels:
+    app.kubernetes.io/name: geolookupservice
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: geolookupservice
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
