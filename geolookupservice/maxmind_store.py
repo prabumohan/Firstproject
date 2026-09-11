@@ -132,6 +132,10 @@ class DatabaseStore:
                 new_city.close()
             if new_asn is not None:
                 new_asn.close()
+            # Remember the on-disk fingerprint so we do not retry until it changes.
+            with self._lock:
+                self._city_file = city_file
+                self._asn_file = asn_file
             return False
 
         now = time.monotonic()
@@ -144,8 +148,9 @@ class DatabaseStore:
             self._asn = new_asn
             self._city_file = city_file
             self._asn_file = asn_file
-            self._last_reload = time.time()
-            self.reload_count += 1
+            if new_city is not None or new_asn is not None:
+                self._last_reload = time.time()
+                self.reload_count += 1
         if new_city or new_asn:
             log.info(
                 "Loaded MaxMind databases city=%s asn=%s",

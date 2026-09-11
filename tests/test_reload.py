@@ -60,6 +60,29 @@ def test_reload_skips_when_unchanged(tmp_path, monkeypatch):
     assert opened["n"] == 1
 
 
+def test_invalid_mmdb_is_not_retried_until_it_changes(tmp_path, monkeypatch):
+    city_path = tmp_path / "GeoLite2-City.mmdb"
+    city_path.write_bytes(b"not-a-database")
+    opened = {"n": 0}
+
+    class BoomReader:
+        def __init__(self, path: str) -> None:
+            opened["n"] += 1
+            raise OSError("invalid database")
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr("geolookupservice.maxmind_store.Reader", BoomReader)
+    settings = Settings(maxmind_data_dir=str(tmp_path), maxmind_license_key="")
+    store = DatabaseStore(settings)
+    assert store.load() is False
+    assert opened["n"] == 1
+    assert store.reload_if_changed() is False
+    assert opened["n"] == 1
+    assert store.mode == "fallback"
+
+
 def test_override_readers_marks_maxmind_mode():
     settings = Settings(maxmind_data_dir="/tmp/unused-geo", maxmind_license_key="")
     store = DatabaseStore(settings)

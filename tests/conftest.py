@@ -1,11 +1,23 @@
 from __future__ import annotations
 
+import os
+
 import pytest
 from fastapi.testclient import TestClient
 
 from geolookupservice.app import create_app
 from geolookupservice.config import Settings, reset_settings_cache
 from geolookupservice.maxmind_store import DatabaseStore
+
+
+@pytest.fixture(autouse=True)
+def isolate_maxmind_env(monkeypatch):
+    for key in list(os.environ):
+        if key.startswith("MAXMIND_") or key.startswith("GEOIP_"):
+            monkeypatch.delenv(key, raising=False)
+    reset_settings_cache()
+    yield
+    reset_settings_cache()
 
 
 @pytest.fixture
