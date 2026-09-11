@@ -19,4 +19,4 @@ htmlcov/
 *.log
 data/
 *.mmdb
-!tests/fixtures/*.mmdb
+!geolookup-service/tests/fixtures/*.mmdb
