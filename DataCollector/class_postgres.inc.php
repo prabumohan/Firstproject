@@ -76,7 +76,14 @@ class Postgres
     /** @return string */
     private function lastError()
     {
-        $err = $this->conn !== false ? pg_last_error($this->conn) : pg_last_error();
-        return $err !== false ? $err : 'unknown error';
+        if ($this->conn !== false) {
+            $err = pg_last_error($this->conn);
+            return ($err !== false && $err !== '') ? $err : 'unknown error';
+        }
+        $last = error_get_last();
+        if ($last && !empty($last['message'])) {
+            return $last['message'];
+        }
+        return 'unknown error';
     }
 }

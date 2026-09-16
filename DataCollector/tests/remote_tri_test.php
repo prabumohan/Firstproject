@@ -110,7 +110,7 @@ $DB_PG = new Postgres();
 try {
     $DB_PG->connect($PG_HOST, $PG_PORT, $PG_DBNAME, $PG_USER, $PG_PASSWORD);
 } catch (Exception $e) {
-    fail('PostgreSQL connection failed: ' . $e->getMessage());
+    fail($e->getMessage());
 }
 
 line('Connected to ' . $PG_DBNAME . ' on ' . $PG_HOST . ':' . $PG_PORT);
