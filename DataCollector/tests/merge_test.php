@@ -153,6 +153,22 @@ assert_eq($by_id['1']['EVENT_NAME'], 'Winner 2026', 'OFFER event name preserved'
 assert_eq($by_id['2']['SOURCE'], 'ODS', 'ODS-only event 2 kept');
 assert_eq($by_id['3']['COMPETITION_NAME'], 'Championship', 'ODS-only event keeps looked-up name');
 
+list($kept_ods, $dropped_spanish) = KeepOdsOfferedOnTri(
+    array(
+        array('EVENT_ID' => '1', 'EVENT_NAME' => 'already in offer'),
+        array('EVENT_ID' => '9', 'EVENT_NAME' => 'offered on TRI only in ODS'),
+        array('EVENT_ID' => '50', 'EVENT_NAME' => 'Spanish La Liga Winner'),
+    ),
+    array('1' => '1'),
+    array('9' => true)
+);
+$kept_names = array();
+foreach ($kept_ods as $row) {
+    $kept_names[] = $row['EVENT_NAME'];
+}
+assert_eq($dropped_spanish, 1, 'Spanish ODS-only not offered on TRI is dropped');
+assert_eq($kept_names, array('already in offer', 'offered on TRI only in ODS'), 'keep OFFER duplicates and TRI-offered ODS-only');
+
 // --- LookupCompetitionNames talks to OFFER schema, not ODS ---
 $fake = new FakePostgres(array(
     'FROM e3_prod_offer.competition' => array(
@@ -194,7 +210,7 @@ assert_true(strpos($q, 'e3_prod_odsdb.odsevent') !== false, 'ods query hits odse
 assert_true(strpos($q, 'JOIN') === false, 'ods query does not JOIN competition');
 assert_true(strpos($q, "'ODS' AS source") !== false, 'ods query tags source ODS');
 assert_true(strpos($q, "e.event->>'type' = '2'") !== false, 'ods query filters outright type');
-assert_true(strpos($q, "e.event->>'status' in") === false, 'ods status filter stays off');
+assert_true(strpos($q, "e.event->>'status' IN ('2')") !== false, 'ods query filters offered status 2');
 
 // --- LoadMergedTriOutrights: ODS names come from offer.competition, not a JOIN ---
 class RoutingPostgres
@@ -203,12 +219,14 @@ class RoutingPostgres
     public $offer_rows;
     public $ods_rows;
     public $competition_rows;
+    public $offered_event_rows;
 
-    public function __construct($offer_rows, $ods_rows, $competition_rows)
+    public function __construct($offer_rows, $ods_rows, $competition_rows, $offered_event_rows = array())
     {
         $this->offer_rows = $offer_rows;
         $this->ods_rows = $ods_rows;
         $this->competition_rows = $competition_rows;
+        $this->offered_event_rows = $offered_event_rows;
     }
 
     public function ExecSQL($query)
@@ -216,6 +234,9 @@ class RoutingPostgres
         $this->queries[] = $query;
         if (strpos($query, '.odsevent') !== false) {
             return $this->ods_rows;
+        }
+        if (strpos($query, "estatus->>'mb'") !== false && strpos($query, 'WHERE id IN') !== false) {
+            return $this->offered_event_rows;
         }
         if (strpos($query, '.event ') !== false || strpos($query, ".event\n") !== false) {
             return $this->offer_rows;
@@ -271,6 +292,9 @@ $router = new RoutingPostgres(
     ),
     array(
         array('ID' => '200', 'NAME' => 'FA Cup'),
+    ),
+    array(
+        array('ID' => '9'),
     )
 );
 $loaded = LoadMergedTriOutrights($router, $router, 'e3_prod_offer', 'e3_prod_odsdb');
@@ -280,6 +304,7 @@ foreach ($loaded as $row) {
     $loaded_by_id[$row['EVENT_ID']] = $row;
 }
 assert_eq($loaded_by_id['9']['COMPETITION_NAME'], 'FA Cup', 'load fills ODS name from offer.competition');
+assert_true(count($loaded) === 2, 'ODS-only event 9 kept because it is offered on TRI');
 $joined_ods = false;
 foreach ($router->queries as $query) {
     if (strpos($query, 'odsevent') !== false && stripos($query, 'JOIN') !== false) {
@@ -321,19 +346,20 @@ if (is_file($pg_config) && is_file($pg_class) && function_exists('pg_connect')) 
         sort($ods_names);
         assert_eq(
             $ods_names,
-            array('Bravo ODS Shared Comp', 'Charlie ODS Lookup Comp', 'Delta ODS Unknown Comp', 'Echo Duplicate Winner ODS copy'),
-            'live ODS returns 4 included events'
+            array('Bravo ODS Shared Comp', 'Charlie ODS Lookup Comp', 'Delta ODS Unknown Comp', 'Echo Duplicate Winner ODS copy', 'Spanish La Liga Winner'),
+            'live ODS SQL returns 5 status-2 outrights including Spanish'
         );
 
         $by_name = array();
         foreach ($loaded_live as $row) {
             $by_name[$row['EVENT_NAME']] = $row;
         }
-        assert_eq(count($loaded_live), 5, 'live merge has 5 unique events');
+        assert_eq(count($loaded_live), 4, 'live merge drops ODS not offered on TRI');
         assert_true(isset($by_name['Alpha OFFER Only Winner']) && $by_name['Alpha OFFER Only Winner']['SOURCE'] === 'OFFER', 'live OFFER-only row kept');
         assert_eq($by_name['Bravo ODS Shared Comp']['COMPETITION_NAME'], 'Premier League', 'live ODS reuses OFFER competition name');
         assert_eq($by_name['Charlie ODS Lookup Comp']['COMPETITION_NAME'], 'Championship', 'live ODS name from second competition lookup');
-        assert_eq(trim($by_name['Delta ODS Unknown Comp']['COMPETITION_NAME']), '', 'live unknown competitionid stays blank');
+        assert_true(!isset($by_name['Delta ODS Unknown Comp']), 'live ODS not offered on TRI is dropped');
+        assert_true(!isset($by_name['Spanish La Liga Winner']), 'live Spanish ODS not offered on TRI is dropped');
         assert_eq($by_name['Echo Duplicate Winner']['SOURCE'], 'OFFER', 'live duplicate event_id keeps OFFER row');
         assert_true(!isset($by_name['Echo Duplicate Winner ODS copy']), 'live ODS duplicate name is not in merged list');
         foreach (array('ZZ Too New OFFER', 'ZZ Too Old OFFER', 'ZZ Wrong Status OFFER', 'ZZ Wrong Type OFFER', 'ZZ Late End OFFER', 'ZZ Too New ODS', 'ZZ Too Old ODS', 'ZZ Wrong Type ODS') as $excluded) {

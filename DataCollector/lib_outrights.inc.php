@@ -96,7 +96,10 @@ ORDER BY e.name";
 /**
  * ODS outright events. No competition name — that lives in another database.
  *
- * Status filter is left off (ODS may still list events that offer has as '2').
+ * Status filter is on (must match TRI offer: currently offered).
+ * ODS-only rows are then dropped unless the same event_id is offered on
+ * e3_prod_offer (status 2, type 2) — so leagues we are not offering (e.g.
+ * Spanish outrights) do not appear.
  *
  * @param Postgres $DB
  * @param string   $schema
@@ -123,6 +126,7 @@ FROM {$schema}.odsevent e
 WHERE (e.event->'anticipated'->>'startTime')::timestamp <= now() - interval '2 hours'
   AND (e.event->'anticipated'->>'startTime')::timestamp >  now() - interval '90 days'
   AND (e.event->'betting'->>'endTime')::timestamp <= now() - interval '2 hours'
+  AND e.event->>'status' IN ('2')
   AND e.event->>'type' = '2'
 ORDER BY e.name";
 
@@ -203,6 +207,61 @@ function LookupCompetitionNames($DB_OFFER, $offer_schema, $ids)
         }
     }
     return $names;
+}
+
+function EventIdsFromRows($rows)
+{
+    $ids = array();
+    foreach ($rows as $row) {
+        $id = isset($row['EVENT_ID']) ? (string) $row['EVENT_ID'] : '';
+        if ($id !== '') {
+            $ids[$id] = $id;
+        }
+    }
+    return $ids;
+}
+
+function LookupTriOfferedEventIds($DB, $schema, $ids)
+{
+    $ids = pg_digit_ids($ids);
+    if (!$ids) {
+        return array();
+    }
+    $schema = pg_ident($schema);
+    $offered = array();
+    foreach (array_chunk($ids, 500) as $chunk) {
+        $in = implode(',', $chunk);
+        $query = "SELECT id FROM {$schema}.event
+                  WHERE id IN ({$in})
+                    AND estatus->>'mb' IN ('2')
+                    AND type = '2'";
+        foreach (pg_fetch_all_rows($DB, $query) as $row) {
+            $id = isset($row['ID']) ? (string) $row['ID'] : '';
+            if ($id !== '') {
+                $offered[$id] = true;
+            }
+        }
+    }
+    return $offered;
+}
+
+function KeepOdsOfferedOnTri($ods_rows, $offer_event_ids, $tri_offered_ids)
+{
+    $kept = array();
+    $dropped = 0;
+    foreach ($ods_rows as $row) {
+        $eid = isset($row['EVENT_ID']) ? (string) $row['EVENT_ID'] : '';
+        if ($eid !== '' && isset($offer_event_ids[$eid])) {
+            $kept[] = $row;
+            continue;
+        }
+        if ($eid !== '' && isset($tri_offered_ids[$eid])) {
+            $kept[] = $row;
+            continue;
+        }
+        $dropped++;
+    }
+    return array($kept, $dropped);
 }
 
 /**
@@ -288,6 +347,17 @@ function LoadMergedTriOutrights($DB_OFFER, $DB_ODS, $offer_schema, $ods_schema)
 
     $offer_rows = FetchOfferOutrights($DB_OFFER, $offer_schema);
     $ods_rows = FetchOdsOutrights($DB_ODS, $ods_schema);
+
+    $offer_event_ids = EventIdsFromRows($offer_rows);
+    $ods_only_ids = array();
+    foreach ($ods_rows as $row) {
+        $eid = isset($row['EVENT_ID']) ? (string) $row['EVENT_ID'] : '';
+        if ($eid !== '' && !isset($offer_event_ids[$eid])) {
+            $ods_only_ids[] = $eid;
+        }
+    }
+    $tri_offered_ids = LookupTriOfferedEventIds($DB_OFFER, $offer_schema, $ods_only_ids);
+    list($ods_rows, $ods_dropped) = KeepOdsOfferedOnTri($ods_rows, $offer_event_ids, $tri_offered_ids);
 
     $names = CompetitionNamesFromRows($offer_rows);
     $missing = MissingCompetitionIds($ods_rows, $names);

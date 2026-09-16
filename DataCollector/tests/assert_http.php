@@ -47,16 +47,18 @@ if (strpos($html, 'MM1 skipped:') !== false || strpos($html, 'MM1 error:') !== f
     echo "FAIL  MM1/Oracle failed gracefully (skipped or error, TRI still rendered)\n";
 }
 assert_contains($html, 'OFFER: <b>2</b>', 'summary OFFER count = 2');
-assert_contains($html, 'ODS: <b>4</b>', 'summary ODS count = 4');
-assert_contains($html, 'ODS names filled: <b>2/3</b>', 'summary ODS names filled = 2/3');
+assert_contains($html, 'ODS fetched: <b>5</b>', 'summary ODS fetched = 5');
+assert_contains($html, 'not offered on TRI (dropped): <b>2</b>', 'summary dropped ODS not on TRI = 2');
+assert_contains($html, 'ODS names filled: <b>2/2</b>', 'summary ODS names filled = 2/2');
 assert_contains($html, 'duplicates skipped: <b>1</b>', 'summary duplicates skipped = 1');
-assert_contains($html, 'merged: <b>5</b>', 'summary merged = 5');
+assert_contains($html, 'merged: <b>4</b>', 'summary merged = 4');
 
 assert_contains($html, 'Alpha OFFER Only Winner', 'OFFER-only event listed');
 assert_contains($html, 'Bravo ODS Shared Comp', 'ODS-only shared-competition event listed');
 assert_contains($html, 'Charlie ODS Lookup Comp', 'ODS-only lookup-competition event listed');
-assert_contains($html, 'Delta ODS Unknown Comp', 'ODS-only unknown-competition event listed');
 assert_contains($html, 'Echo Duplicate Winner', 'duplicate event keeps OFFER name');
+assert_not_contains($html, 'Delta ODS Unknown Comp', 'ODS event not offered on TRI is dropped');
+assert_not_contains($html, 'Spanish La Liga Winner', 'Spanish ODS outright not offered on TRI is dropped');
 assert_not_contains($html, 'Echo Duplicate Winner ODS copy', 'ODS copy of duplicate event_id is not listed');
 
 assert_contains($html, 'Premier League', 'competition name from OFFER join / reuse');
@@ -97,10 +99,10 @@ if (!preg_match('/<tr class="row">\s*<td>100<\/td>\s*<td>Premier League<\/td>\s*
 }
 
 if (!preg_match('/<tr class="row">\s*<td>999<\/td>\s*<td><\/td>\s*<td>4<\/td>\s*<td>Delta ODS Unknown Comp<\/td>\s*<td>ODS<\/td>/s', $html)) {
-    $failures++;
-    echo "FAIL  Delta row is ODS with blank competition name\n";
+    echo "PASS  Delta row not listed (not offered on TRI)\n";
 } else {
-    echo "PASS  Delta row is ODS with blank competition name\n";
+    $failures++;
+    echo "FAIL  Delta row should have been dropped (not offered on TRI)\n";
 }
 
 if (!preg_match('/<tr class="row">\s*<td>100<\/td>\s*<td>Premier League<\/td>\s*<td>1<\/td>\s*<td>Alpha OFFER Only Winner<\/td>\s*<td>OFFER<\/td>/s', $html)) {

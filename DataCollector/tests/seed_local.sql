@@ -34,7 +34,8 @@ CREATE TABLE e3_prod_odsdb.odsevent (
 INSERT INTO e3_prod_offer.competition (id, name) VALUES
     (100, 'Premier League'),
     (200, 'Championship'),
-    (300, 'FA Cup');
+    (300, 'FA Cup'),
+    (400, 'La Liga');
 
 -- Reusable JSON builders for times inside / outside the 2h–90d window.
 -- included: 3 hours ago; too new: 30 minutes ago; too old: 100 days ago.
@@ -179,6 +180,34 @@ VALUES (
     '2'
 );
 
+-- Offered on TRI but missing offer EndTime, so the OFFER query skips it.
+-- ODS can still list it (Bravo / Charlie). Spanish (id 50) has no such row.
+INSERT INTO e3_prod_offer.event
+    (id, name, competitionid, estarttime, estatus, etradestatus, betting, type)
+VALUES (
+    2,
+    'Bravo OFFER stub (no EndTime)',
+    100,
+    now() - interval '3 hours',
+    '{"mb":"2"}'::jsonb,
+    '{"mb":"2"}'::jsonb,
+    '{}'::jsonb,
+    '2'
+);
+
+INSERT INTO e3_prod_offer.event
+    (id, name, competitionid, estarttime, estatus, etradestatus, betting, type)
+VALUES (
+    3,
+    'Charlie OFFER stub (no EndTime)',
+    200,
+    now() - interval '4 hours',
+    '{"mb":"2"}'::jsonb,
+    '{"mb":"2"}'::jsonb,
+    '{}'::jsonb,
+    '2'
+);
+
 -- ODS included: competition already on an OFFER result row (name reused, no extra lookup)
 INSERT INTO e3_prod_odsdb.odsevent (id, name, competitionid, event)
 VALUES (
@@ -230,6 +259,21 @@ VALUES (
     10,
     'Echo Duplicate Winner ODS copy',
     100,
+    jsonb_build_object(
+        'anticipated', jsonb_build_object('startTime', to_char(now() - interval '3 hours', 'YYYY-MM-DD HH24:MI:SS')),
+        'betting', jsonb_build_object('endTime', to_char(now() - interval '3 hours', 'YYYY-MM-DD HH24:MI:SS')),
+        'type', '2',
+        'status', '2',
+        'tradeStatus', '2'
+    )
+);
+
+-- ODS fetched but dropped: not offered on TRI (Spanish outright)
+INSERT INTO e3_prod_odsdb.odsevent (id, name, competitionid, event)
+VALUES (
+    50,
+    'Spanish La Liga Winner',
+    400,
     jsonb_build_object(
         'anticipated', jsonb_build_object('startTime', to_char(now() - interval '3 hours', 'YYYY-MM-DD HH24:MI:SS')),
         'betting', jsonb_build_object('endTime', to_char(now() - interval '3 hours', 'YYYY-MM-DD HH24:MI:SS')),

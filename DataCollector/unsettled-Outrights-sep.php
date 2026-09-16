@@ -183,6 +183,7 @@ FROM e3_prod_odsdb.odsevent e
 WHERE (e.event->'anticipated'->>'startTime')::timestamp <= now() - interval '2 hours'
   AND (e.event->'anticipated'->>'startTime')::timestamp >  now() - interval '90 days'
   AND (e.event->'betting'->>'endTime')::timestamp <= now() - interval '2 hours'
+  AND e.event->>'status' IN ('2')
   AND e.event->>'type' = '2'
 ORDER BY e.name";
 
@@ -208,6 +209,72 @@ function LookupCompetitionNames($DB_PG, $ids)
         }
     }
     return $names;
+}
+
+/**
+ * Event IDs that TRI is currently offering (e3_prod_offer, status 2, type 2).
+ * Used to drop ODS-only outrights that are not on the offer feed (e.g. Spanish
+ * leagues we are not offering).
+ */
+function LookupTriOfferedEventIds($DB_PG, $ids)
+{
+    $ids = pg_digit_ids($ids);
+    if (!$ids) {
+        return array();
+    }
+
+    $offered = array();
+    foreach (array_chunk($ids, 500) as $chunk) {
+        $in = implode(',', $chunk);
+        $query = "SELECT id FROM e3_prod_offer.event
+                  WHERE id IN ({$in})
+                    AND estatus->>'mb' IN ('2')
+                    AND type = '2'";
+        foreach (pg_all_rows($DB_PG, $query) as $row) {
+            $id = isset($row['ID']) ? (string) $row['ID'] : '';
+            if ($id !== '') {
+                $offered[$id] = true;
+            }
+        }
+    }
+    return $offered;
+}
+
+function EventIdsFromRows($rows)
+{
+    $ids = array();
+    foreach ($rows as $row) {
+        $id = isset($row['EVENT_ID']) ? (string) $row['EVENT_ID'] : '';
+        if ($id !== '') {
+            $ids[$id] = $id;
+        }
+    }
+    return $ids;
+}
+
+/**
+ * Keep ODS duplicates of OFFER rows (merge will skip them) and ODS-only rows
+ * whose event_id is currently offered on TRI. Drop the rest.
+ *
+ * @return array  array(kept_rows, dropped_count)
+ */
+function KeepOdsOfferedOnTri($ods_rows, $offer_event_ids, $tri_offered_ids)
+{
+    $kept = array();
+    $dropped = 0;
+    foreach ($ods_rows as $row) {
+        $eid = isset($row['EVENT_ID']) ? (string) $row['EVENT_ID'] : '';
+        if ($eid !== '' && isset($offer_event_ids[$eid])) {
+            $kept[] = $row;
+            continue;
+        }
+        if ($eid !== '' && isset($tri_offered_ids[$eid])) {
+            $kept[] = $row;
+            continue;
+        }
+        $dropped++;
+    }
+    return array($kept, $dropped);
 }
 
 function MergeOfferAndOds($offer_rows, $ods_rows)
@@ -280,8 +347,11 @@ function CollectTriOutrights($DB_PG)
     $offer_error = null;
     $ods_error = null;
     $name_error = null;
+    $offer_filter_error = null;
     $offer_rows = array();
     $ods_rows = array();
+    $ods_fetched = 0;
+    $ods_dropped = 0;
     $ods_retried = false;
     $ods_retry_db = null;
 
@@ -324,6 +394,26 @@ function CollectTriOutrights($DB_PG)
             }
         }
     }
+
+    $ods_fetched = count($ods_rows);
+    $offer_event_ids = EventIdsFromRows($offer_rows);
+    $ods_only_ids = array();
+    foreach ($ods_rows as $row) {
+        $eid = isset($row['EVENT_ID']) ? (string) $row['EVENT_ID'] : '';
+        if ($eid !== '' && !isset($offer_event_ids[$eid])) {
+            $ods_only_ids[] = $eid;
+        }
+    }
+    $tri_offered_ids = array();
+    if ($ods_only_ids) {
+        try {
+            $tri_offered_ids = LookupTriOfferedEventIds($DB_PG, $ods_only_ids);
+        } catch (Exception $e) {
+            $offer_filter_error = $e->getMessage();
+            $tri_offered_ids = array();
+        }
+    }
+    list($ods_rows, $ods_dropped) = KeepOdsOfferedOnTri($ods_rows, $offer_event_ids, $tri_offered_ids);
 
     list($merged, $skipped, $names) = MergeOfferAndOds($offer_rows, $ods_rows);
 
@@ -380,6 +470,9 @@ function CollectTriOutrights($DB_PG)
         'ods_in_table' => $ods_in_table,
         'ods_retried' => $ods_retried,
         'ods_retry_db' => $ods_retry_db,
+        'ods_fetched' => $ods_fetched,
+        'ods_dropped' => $ods_dropped,
+        'offer_filter_error' => $offer_filter_error,
     );
 }
 
@@ -401,9 +494,14 @@ function LookupPostgresOfferedOutrights($DB_PG, $schema)
     $ods_named = $tri['ods_named'];
     $ods_in_table = $tri['ods_in_table'];
 
+    $ods_fetched = isset($tri['ods_fetched']) ? $tri['ods_fetched'] : count($ods_rows);
+    $ods_dropped = isset($tri['ods_dropped']) ? $tri['ods_dropped'] : 0;
+    $offer_filter_error = isset($tri['offer_filter_error']) ? $tri['offer_filter_error'] : null;
+
     echo '<p style="text-align:center;background:#f4f4f4;padding:8px">';
     echo 'OFFER: <b>' . count($offer_rows) . '</b>';
-    echo ' &nbsp;|&nbsp; ODS: <b>' . count($ods_rows) . '</b>';
+    echo ' &nbsp;|&nbsp; ODS fetched: <b>' . (int) $ods_fetched . '</b>';
+    echo ' &nbsp;|&nbsp; not offered on TRI (dropped): <b>' . (int) $ods_dropped . '</b>';
     echo ' &nbsp;|&nbsp; ODS names filled: <b>' . $ods_named . '/' . $ods_in_table . '</b>';
     echo ' &nbsp;|&nbsp; duplicates skipped: <b>' . (int) $skipped . '</b>';
     echo ' &nbsp;|&nbsp; merged: <b>' . count($merged) . '</b>';
@@ -414,6 +512,9 @@ function LookupPostgresOfferedOutrights($DB_PG, $schema)
     if ($ods_error) {
         echo '<p style="color:red">ODS query error: ' . h($ods_error) . '</p>';
         echo '<p>If ODS is a separate database, add to pg_config.inc.php: <code>$PG_ODS_DBNAME = \'e3_prod_odsdb\';</code></p>';
+    }
+    if ($offer_filter_error) {
+        echo '<p style="color:red">TRI offered-event lookup error: ' . h($offer_filter_error) . '</p>';
     }
     if ($name_error) {
         echo '<p style="color:red">Competition name lookup error: ' . h($name_error) . '</p>';

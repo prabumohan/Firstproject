@@ -146,6 +146,7 @@ FROM {$schema}.odsevent e
 WHERE (e.event->'anticipated'->>'startTime')::timestamp <= now() - interval '2 hours'
   AND (e.event->'anticipated'->>'startTime')::timestamp >  now() - interval '90 days'
   AND (e.event->'betting'->>'endTime')::timestamp <= now() - interval '2 hours'
+  AND e.event->>'status' IN ('2')
   AND e.event->>'type' = '2'
 ORDER BY e.name";
     return pg_fetch_all_rows($DB, $query);

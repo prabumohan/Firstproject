@@ -132,7 +132,9 @@ line('OFFER rows:              ' . $offer_n);
 if ($tri['offer_error']) {
     line('OFFER error:             ' . $tri['offer_error']);
 }
-line('ODS rows:                ' . $ods_n);
+line('ODS fetched:             ' . (isset($tri['ods_fetched']) ? $tri['ods_fetched'] : $ods_n));
+line('ODS not offered on TRI:  ' . (isset($tri['ods_dropped']) ? $tri['ods_dropped'] : 'n/a') . ' (dropped)');
+line('ODS kept after filter:   ' . $ods_n);
 if ($tri['ods_retried']) {
     line('ODS retry db:            ' . $tri['ods_retry_db']);
 }
