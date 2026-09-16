@@ -12,15 +12,15 @@
  * ODS competition names are looked up from e3_prod_offer.competition
  * in a separate query — no cross-database JOIN.
  *
- * Local run against the SAME remote DBs as live (not a fixture DB):
- *   1. Copy live pg_config.inc.php into this folder (gitignored).
- *   2. CLI dashboard:  php unsettled-Outrights-sep.php
- *      Built-in server: php -S localhost:8080
- *      then open /unsettled-Outrights-sep.php
- *   Oracle class_database.inc.php / common.inc.php / TNS are optional;
- *   TRI still runs if they are missing.
+ * Local fixture test (Postgres on this machine, Oracle optional):
+ *   bash tests/run_local.sh
+ *   then open http://127.0.0.1:8080/unsettled-Outrights-sep.php
  *
- * CLI data test (no HTML): php tests/remote_tri_test.php
+ * Remote DBs (same as live): copy live pg_config.inc.php into this folder
+ * (gitignored) and run php tests/remote_tri_test.php
+ *
+ * class_database.inc.php / common.inc.php / Oracle OCI are optional;
+ * TRI still runs if they are missing.
  */
 $here = dirname(__FILE__);
 
@@ -462,18 +462,17 @@ if (defined('TRI_LIBRARY_ONLY') && TRI_LIBRARY_ONLY) {
 <h1 style="text-align:center">NON-LIVE | Unsettled Matches (MM1)</h1>
 <?php
 $oracle_error = null;
-if (!class_exists('Oracle')) {
-    echo '<p style="text-align:center">MM1 skipped: class_database.inc.php / Oracle not available. TRI below still runs against remote pg_config.</p>';
-} else {
-    try {
-        $DB_ORACLE = new Oracle();
-        $DB_ORACLE->connectORA('SO_PROD.world', 'reporting', 'R3w1nd##');
-        LookupOracleUnsettled($DB_ORACLE);
-        $DB_ORACLE->Disconnect();
-    } catch (Exception $e) {
-        $oracle_error = $e->getMessage();
-        echo '<p style="color:red">MM1 error: ' . h($oracle_error) . '</p>';
+try {
+    if (!class_exists('Oracle') || !function_exists('oci_connect')) {
+        throw new Exception('Oracle OCI client is not available on this host');
     }
+    $DB_ORACLE = new Oracle();
+    $DB_ORACLE->connectORA('SO_PROD.world', 'reporting', 'R3w1nd##');
+    LookupOracleUnsettled($DB_ORACLE);
+    $DB_ORACLE->Disconnect();
+} catch (Throwable $e) {
+    $oracle_error = $e->getMessage();
+    echo '<p style="color:red">MM1 error: ' . h($oracle_error) . '</p>';
 }
 ?>
 

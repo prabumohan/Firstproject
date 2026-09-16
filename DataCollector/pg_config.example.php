@@ -3,12 +3,15 @@
  * Copy this file to pg_config.inc.php and fill in the SAME live values
  * the dashboard already uses. Do not commit pg_config.inc.php.
  *
- * This is a remote-connection config, not a local fixture database.
  * Place the filled file in DataCollector/ (next to the dashboard) or
- * copy it next to tests/remote_tri_test.php, then run:
+ * copy it next to tests/remote_tri_test.php.
  *
- *   cd DataCollector
- *   php tests/remote_tri_test.php
+ * Local fixture (127.0.0.1, both schemas in one database):
+ *   bash tests/run_local.sh
+ * That writes this gitignored file with the reporting/reporting_local user.
+ *
+ * Remote live databases:
+ *   cd DataCollector && php tests/remote_tri_test.php
  *
  * OFFER (e3_prod_offer) and ODS (e3_prod_odsdb) may be two Postgres
  * databases. The dashboard never JOINs them — it queries each one

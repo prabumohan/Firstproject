@@ -288,6 +288,66 @@ foreach ($router->queries as $query) {
 }
 assert_true(!$joined_ods, 'load never JOINs odsevent to competition');
 
+// --- Live local Postgres fixture (optional; run tests/run_local.sh first) ---
+$pg_config = dirname(__DIR__) . '/pg_config.inc.php';
+$pg_class = dirname(__DIR__) . '/class_postgres.inc.php';
+if (is_file($pg_config) && is_file($pg_class) && function_exists('pg_connect')) {
+    require_once $pg_class;
+    require $pg_config;
+    try {
+        $live = new Postgres();
+        $live->connect($PG_HOST, $PG_PORT, $PG_DBNAME, $PG_USER, $PG_PASSWORD);
+        $offer_live = FetchOfferOutrights($live, 'e3_prod_offer');
+        $ods_live = FetchOdsOutrights($live, 'e3_prod_odsdb');
+        $loaded_live = LoadMergedTriOutrights($live, $live, 'e3_prod_offer', 'e3_prod_odsdb');
+        $live->Disconnect();
+
+        $offer_names = array();
+        foreach ($offer_live as $row) {
+            $offer_names[] = $row['EVENT_NAME'];
+        }
+        sort($offer_names);
+        assert_eq($offer_names, array('Alpha OFFER Only Winner', 'Echo Duplicate Winner'), 'live OFFER returns 2 included events');
+
+        $ods_names = array();
+        foreach ($ods_live as $row) {
+            $ods_names[] = $row['EVENT_NAME'];
+        }
+        sort($ods_names);
+        assert_eq(
+            $ods_names,
+            array('Bravo ODS Shared Comp', 'Charlie ODS Lookup Comp', 'Delta ODS Unknown Comp', 'Echo Duplicate Winner ODS copy'),
+            'live ODS returns 4 included events'
+        );
+
+        $by_name = array();
+        foreach ($loaded_live as $row) {
+            $by_name[$row['EVENT_NAME']] = $row;
+        }
+        assert_eq(count($loaded_live), 5, 'live merge has 5 unique events');
+        assert_true(isset($by_name['Alpha OFFER Only Winner']) && $by_name['Alpha OFFER Only Winner']['SOURCE'] === 'OFFER', 'live OFFER-only row kept');
+        assert_eq($by_name['Bravo ODS Shared Comp']['COMPETITION_NAME'], 'Premier League', 'live ODS reuses OFFER competition name');
+        assert_eq($by_name['Charlie ODS Lookup Comp']['COMPETITION_NAME'], 'Championship', 'live ODS name from second competition lookup');
+        assert_eq(trim($by_name['Delta ODS Unknown Comp']['COMPETITION_NAME']), '', 'live unknown competitionid stays blank');
+        assert_eq($by_name['Echo Duplicate Winner']['SOURCE'], 'OFFER', 'live duplicate event_id keeps OFFER row');
+        assert_true(!isset($by_name['Echo Duplicate Winner ODS copy']), 'live ODS duplicate name is not in merged list');
+        foreach (array('ZZ Too New OFFER', 'ZZ Too Old OFFER', 'ZZ Wrong Status OFFER', 'ZZ Wrong Type OFFER', 'ZZ Late End OFFER', 'ZZ Too New ODS', 'ZZ Too Old ODS', 'ZZ Wrong Type ODS') as $excluded) {
+            assert_true(!isset($by_name[$excluded]), 'live excluded: ' . $excluded);
+        }
+        $joined_live = false;
+        foreach ($ods_live as $row) {
+            if (isset($row['COMPETITION_NAME']) && trim($row['COMPETITION_NAME']) !== '') {
+                $joined_live = true;
+            }
+        }
+        assert_true(!$joined_live, 'live ODS query does not return competition names (filled in PHP)');
+    } catch (Exception $e) {
+        echo "SKIP live postgres fixture: " . $e->getMessage() . "\n";
+    }
+} else {
+    echo "SKIP live postgres fixture (no pg_config.inc.php)\n";
+}
+
 if ($failures) {
     echo "\n$failures test(s) failed\n";
     exit(1);
