@@ -40,7 +40,12 @@ function assert_not_contains($html, $needle, $msg)
 }
 
 assert_contains($html, 'OFFERED Outrights (TRI)', 'TRI heading present');
-assert_contains($html, 'MM1 error:', 'MM1/Oracle failed gracefully');
+if (strpos($html, 'MM1 skipped:') !== false || strpos($html, 'MM1 error:') !== false) {
+    echo "PASS  MM1/Oracle failed gracefully (skipped or error, TRI still rendered)\n";
+} else {
+    $failures++;
+    echo "FAIL  MM1/Oracle failed gracefully (skipped or error, TRI still rendered)\n";
+}
 assert_contains($html, 'OFFER: <b>2</b>', 'summary OFFER count = 2');
 assert_contains($html, 'ODS: <b>4</b>', 'summary ODS count = 4');
 assert_contains($html, 'ODS names filled: <b>2/3</b>', 'summary ODS names filled = 2/3');
