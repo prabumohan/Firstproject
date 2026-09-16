@@ -84,6 +84,16 @@ if (!isset($PG_HOST, $PG_PORT, $PG_DBNAME, $PG_USER, $PG_PASSWORD)) {
     fail($pg_config . ' did not set $PG_HOST / $PG_PORT / $PG_DBNAME / $PG_USER / $PG_PASSWORD');
 }
 
+$local_hosts = array('127.0.0.1', 'localhost', '::1');
+if (in_array((string) $PG_HOST, $local_hosts, true) && getenv('TRI_ALLOW_LOCAL') !== '1') {
+    fail(
+        "pg_config.inc.php points at {$PG_HOST} — that is a local fixture, not the live remote DB.\n" .
+        "  Copy the live DataCollector/pg_config.inc.php (same host the dashboard uses) over this file.\n" .
+        "  Then re-run: php tests/remote_tri_test.php\n" .
+        "  To force the local fixture anyway: TRI_ALLOW_LOCAL=1 php tests/remote_tri_test.php"
+    );
+}
+
 define('TRI_LIBRARY_ONLY', true);
 require_once $dc_dir . '/unsettled-Outrights-sep.php';
 

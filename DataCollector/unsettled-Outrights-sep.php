@@ -12,15 +12,16 @@
  * ODS competition names are looked up from e3_prod_offer.competition
  * in a separate query — no cross-database JOIN.
  *
- * Local fixture test (Postgres on this machine, Oracle optional):
- *   bash tests/run_local.sh
- *   then open http://127.0.0.1:8080/unsettled-Outrights-sep.php
+ * Remote DBs (same as live, not a fixture): copy live pg_config.inc.php
+ * into this folder (gitignored) and run:
+ *   php tests/remote_tri_test.php
+ * Built-in server: php -S localhost:8080   then open this page.
  *
- * Remote DBs (same as live): copy live pg_config.inc.php into this folder
- * (gitignored) and run php tests/remote_tri_test.php
- *
- * class_database.inc.php / common.inc.php / Oracle OCI are optional;
+ * Oracle class_database.inc.php / common.inc.php / OCI / TNS are optional;
  * TRI still runs if they are missing.
+ *
+ * Optional local fixture (not the live databases):
+ *   bash tests/run_local.sh
  */
 $here = dirname(__FILE__);
 
@@ -462,17 +463,18 @@ if (defined('TRI_LIBRARY_ONLY') && TRI_LIBRARY_ONLY) {
 <h1 style="text-align:center">NON-LIVE | Unsettled Matches (MM1)</h1>
 <?php
 $oracle_error = null;
-try {
-    if (!class_exists('Oracle') || !function_exists('oci_connect')) {
-        throw new Exception('Oracle OCI client is not available on this host');
+if (!class_exists('Oracle') || !function_exists('oci_connect')) {
+    echo '<p style="text-align:center">MM1 skipped: Oracle OCI / TNS not available. TRI below still runs against pg_config.</p>';
+} else {
+    try {
+        $DB_ORACLE = new Oracle();
+        $DB_ORACLE->connectORA('SO_PROD.world', 'reporting', 'R3w1nd##');
+        LookupOracleUnsettled($DB_ORACLE);
+        $DB_ORACLE->Disconnect();
+    } catch (Throwable $e) {
+        $oracle_error = $e->getMessage();
+        echo '<p style="color:red">MM1 error: ' . h($oracle_error) . '</p>';
     }
-    $DB_ORACLE = new Oracle();
-    $DB_ORACLE->connectORA('SO_PROD.world', 'reporting', 'R3w1nd##');
-    LookupOracleUnsettled($DB_ORACLE);
-    $DB_ORACLE->Disconnect();
-} catch (Throwable $e) {
-    $oracle_error = $e->getMessage();
-    echo '<p style="color:red">MM1 error: ' . h($oracle_error) . '</p>';
 }
 ?>
 

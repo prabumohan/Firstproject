@@ -288,13 +288,18 @@ foreach ($router->queries as $query) {
 }
 assert_true(!$joined_ods, 'load never JOINs odsevent to competition');
 
-// --- Live local Postgres fixture (optional; run tests/run_local.sh first) ---
+// --- Local Postgres fixture only (optional; run tests/run_local.sh first).
+// Do not run these assertions against a live remote pg_config.inc.php.
 $pg_config = dirname(__DIR__) . '/pg_config.inc.php';
 $pg_class = dirname(__DIR__) . '/class_postgres.inc.php';
 if (is_file($pg_config) && is_file($pg_class) && function_exists('pg_connect')) {
     require_once $pg_class;
     require $pg_config;
-    try {
+    $local_hosts = array('127.0.0.1', 'localhost', '::1');
+    if (!isset($PG_HOST) || (!in_array((string) $PG_HOST, $local_hosts, true) && getenv('TRI_LOCAL_FIXTURE') !== '1')) {
+        echo "SKIP local postgres fixture (pg_config.inc.php is not 127.0.0.1)\n";
+    } else {
+        try {
         $live = new Postgres();
         $live->connect($PG_HOST, $PG_PORT, $PG_DBNAME, $PG_USER, $PG_PASSWORD);
         $offer_live = FetchOfferOutrights($live, 'e3_prod_offer');
@@ -341,8 +346,9 @@ if (is_file($pg_config) && is_file($pg_class) && function_exists('pg_connect')) 
             }
         }
         assert_true(!$joined_live, 'live ODS query does not return competition names (filled in PHP)');
-    } catch (Exception $e) {
-        echo "SKIP live postgres fixture: " . $e->getMessage() . "\n";
+        } catch (Exception $e) {
+            echo "SKIP live postgres fixture: " . $e->getMessage() . "\n";
+        }
     }
 } else {
     echo "SKIP live postgres fixture (no pg_config.inc.php)\n";
