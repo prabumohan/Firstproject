@@ -9,8 +9,10 @@
  * TRI merges two Postgres queries in PHP:
  *   1) e3_prod_offer.event  JOIN competition  (has names)
  *   2) e3_prod_odsdb.odsevent                 (competitionid only)
- * ODS competition names are looked up from e3_prod_offer.competition
- * in a separate query — no cross-database JOIN.
+ * ODS-only rows are kept only if the same event_id is currently offered on
+ * TRI (e3_prod_offer.event status 2, type 2). That drops leagues we are not
+ * offering (e.g. Spanish outrights). Duplicates of OFFER event_ids still
+ * merge with OFFER winning.
  *
  * Remote DBs (same as live, not a fixture): copy live pg_config.inc.php
  * into this folder (gitignored) and run:
