@@ -11,11 +11,41 @@
  *   2) e3_prod_odsdb.odsevent                 (competitionid only)
  * ODS competition names are looked up from e3_prod_offer.competition
  * in a separate query — no cross-database JOIN.
+ *
+ * Local run against the SAME remote DBs as live (not a fixture DB):
+ *   1. Copy live pg_config.inc.php into this folder (gitignored).
+ *   2. CLI dashboard:  php unsettled-Outrights-sep.php
+ *      Built-in server: php -S localhost:8080
+ *      then open /unsettled-Outrights-sep.php
+ *   Oracle class_database.inc.php / common.inc.php / TNS are optional;
+ *   TRI still runs if they are missing.
+ *
+ * CLI data test (no HTML): php tests/remote_tri_test.php
  */
-require_once dirname(__FILE__) . '/class_database.inc.php';
-require_once dirname(__FILE__) . '/common.inc.php';
-require_once dirname(__FILE__) . '/class_postgres.inc.php';
-require_once dirname(__FILE__) . '/pg_config.inc.php';
+$here = dirname(__FILE__);
+
+if (is_file($here . '/class_database.inc.php')) {
+    require_once $here . '/class_database.inc.php';
+}
+if (is_file($here . '/common.inc.php')) {
+    require_once $here . '/common.inc.php';
+}
+if (!class_exists('Postgres')) {
+    require_once $here . '/class_postgres.inc.php';
+}
+if (!isset($PG_HOST)) {
+    if (!is_file($here . '/pg_config.inc.php')) {
+        if (defined('TRI_LIBRARY_ONLY') && TRI_LIBRARY_ONLY) {
+            throw new Exception('pg_config.inc.php not found in ' . $here);
+        }
+        echo '<p style="color:red">pg_config.inc.php is missing. Copy it from the live DataCollector folder (same values the dashboard uses). See pg_config.example.php.</p>';
+        exit(1);
+    }
+    require_once $here . '/pg_config.inc.php';
+}
+if (!isset($PG_SCHEMA) || $PG_SCHEMA === '') {
+    $PG_SCHEMA = 'e3_prod_offer';
+}
 
 date_default_timezone_set('Europe/London');
 $now = date('Y-m-d H:i:s');
@@ -235,17 +265,24 @@ function MergeOfferAndOds($offer_rows, $ods_rows)
 }
 
 /**
- * OFFER + ODS, competition names filled from e3_prod_offer.competition in PHP.
+ * Fetch OFFER + ODS, fill ODS competition names from e3_prod_offer.competition
+ * in PHP, merge (OFFER wins on the same event_id). Returns data only — no HTML.
+ *
+ * If the ODS query fails on $DB_PG, retries a second connection to
+ * $PG_ODS_DBNAME (or e3_prod_odsdb).
  *
  * @param Postgres $DB_PG
+ * @return array
  */
-function LookupPostgresOfferedOutrights($DB_PG, $schema)
+function CollectTriOutrights($DB_PG)
 {
     $offer_error = null;
     $ods_error = null;
     $name_error = null;
     $offer_rows = array();
     $ods_rows = array();
+    $ods_retried = false;
+    $ods_retry_db = null;
 
     try {
         $offer_rows = FetchOfferOutrights($DB_PG);
@@ -259,17 +296,22 @@ function LookupPostgresOfferedOutrights($DB_PG, $schema)
         $ods_error = $e->getMessage();
         // Same host/user, different database (cannot JOIN across DBs).
         if (isset($GLOBALS['PG_HOST'])) {
-            $ods_db = isset($GLOBALS['PG_ODS_DBNAME']) ? $GLOBALS['PG_ODS_DBNAME'] : 'e3_prod_odsdb';
+            $ods_db = isset($GLOBALS['PG_ODS_DBNAME']) && $GLOBALS['PG_ODS_DBNAME'] !== ''
+                ? $GLOBALS['PG_ODS_DBNAME'] : 'e3_prod_odsdb';
+            $ods_host = isset($GLOBALS['PG_ODS_HOST']) && $GLOBALS['PG_ODS_HOST'] !== ''
+                ? $GLOBALS['PG_ODS_HOST'] : $GLOBALS['PG_HOST'];
+            $ods_port = isset($GLOBALS['PG_ODS_PORT']) && $GLOBALS['PG_ODS_PORT'] !== ''
+                ? $GLOBALS['PG_ODS_PORT'] : $GLOBALS['PG_PORT'];
+            $ods_user = isset($GLOBALS['PG_ODS_USER']) && $GLOBALS['PG_ODS_USER'] !== ''
+                ? $GLOBALS['PG_ODS_USER'] : $GLOBALS['PG_USER'];
+            $ods_pass = isset($GLOBALS['PG_ODS_PASSWORD'])
+                ? $GLOBALS['PG_ODS_PASSWORD'] : $GLOBALS['PG_PASSWORD'];
+            $ods_retried = true;
+            $ods_retry_db = $ods_db;
             $DB_ODS = null;
             try {
                 $DB_ODS = new Postgres();
-                $DB_ODS->connect(
-                    $GLOBALS['PG_HOST'],
-                    $GLOBALS['PG_PORT'],
-                    $ods_db,
-                    $GLOBALS['PG_USER'],
-                    $GLOBALS['PG_PASSWORD']
-                );
+                $DB_ODS->connect($ods_host, $ods_port, $ods_db, $ods_user, $ods_pass);
                 $ods_rows = FetchOdsOutrights($DB_ODS);
                 $ods_error = null;
                 $DB_ODS->Disconnect();
@@ -313,18 +355,50 @@ function LookupPostgresOfferedOutrights($DB_PG, $schema)
     }
 
     $ods_named = 0;
+    $ods_in_table = 0;
     foreach ($merged as $row) {
-        if (isset($row['SOURCE']) && $row['SOURCE'] === 'ODS'
-            && isset($row['COMPETITION_NAME']) && trim((string) $row['COMPETITION_NAME']) !== '') {
+        if (!isset($row['SOURCE']) || $row['SOURCE'] !== 'ODS') {
+            continue;
+        }
+        $ods_in_table++;
+        if (isset($row['COMPETITION_NAME']) && trim((string) $row['COMPETITION_NAME']) !== '') {
             $ods_named++;
         }
     }
-    $ods_in_table = 0;
-    foreach ($merged as $row) {
-        if (isset($row['SOURCE']) && $row['SOURCE'] === 'ODS') {
-            $ods_in_table++;
-        }
-    }
+
+    return array(
+        'offer_rows' => $offer_rows,
+        'ods_rows' => $ods_rows,
+        'merged' => $merged,
+        'skipped' => $skipped,
+        'names' => $names,
+        'offer_error' => $offer_error,
+        'ods_error' => $ods_error,
+        'name_error' => $name_error,
+        'ods_named' => $ods_named,
+        'ods_in_table' => $ods_in_table,
+        'ods_retried' => $ods_retried,
+        'ods_retry_db' => $ods_retry_db,
+    );
+}
+
+/**
+ * OFFER + ODS, competition names filled from e3_prod_offer.competition in PHP.
+ *
+ * @param Postgres $DB_PG
+ */
+function LookupPostgresOfferedOutrights($DB_PG, $schema)
+{
+    $tri = CollectTriOutrights($DB_PG);
+    $offer_rows = $tri['offer_rows'];
+    $ods_rows = $tri['ods_rows'];
+    $merged = $tri['merged'];
+    $skipped = $tri['skipped'];
+    $offer_error = $tri['offer_error'];
+    $ods_error = $tri['ods_error'];
+    $name_error = $tri['name_error'];
+    $ods_named = $tri['ods_named'];
+    $ods_in_table = $tri['ods_in_table'];
 
     echo '<p style="text-align:center;background:#f4f4f4;padding:8px">';
     echo 'OFFER: <b>' . count($offer_rows) . '</b>';
@@ -370,6 +444,10 @@ function LookupPostgresOfferedOutrights($DB_PG, $schema)
     }
     echo '</table>';
 }
+
+if (defined('TRI_LIBRARY_ONLY') && TRI_LIBRARY_ONLY) {
+    return;
+}
 ?>
 <!DOCTYPE html>
 <html>
@@ -384,14 +462,18 @@ function LookupPostgresOfferedOutrights($DB_PG, $schema)
 <h1 style="text-align:center">NON-LIVE | Unsettled Matches (MM1)</h1>
 <?php
 $oracle_error = null;
-try {
-    $DB_ORACLE = new Oracle();
-    $DB_ORACLE->connectORA('SO_PROD.world', 'reporting', 'R3w1nd##');
-    LookupOracleUnsettled($DB_ORACLE);
-    $DB_ORACLE->Disconnect();
-} catch (Exception $e) {
-    $oracle_error = $e->getMessage();
-    echo '<p style="color:red">MM1 error: ' . h($oracle_error) . '</p>';
+if (!class_exists('Oracle')) {
+    echo '<p style="text-align:center">MM1 skipped: class_database.inc.php / Oracle not available. TRI below still runs against remote pg_config.</p>';
+} else {
+    try {
+        $DB_ORACLE = new Oracle();
+        $DB_ORACLE->connectORA('SO_PROD.world', 'reporting', 'R3w1nd##');
+        LookupOracleUnsettled($DB_ORACLE);
+        $DB_ORACLE->Disconnect();
+    } catch (Exception $e) {
+        $oracle_error = $e->getMessage();
+        echo '<p style="color:red">MM1 error: ' . h($oracle_error) . '</p>';
+    }
 }
 ?>
 
